@@ -176,7 +176,7 @@ tr:hover td{background:#ffffff03;}
       <div class="cat-bars" id="cat-bars"></div>
     </div>
     <div class="card">
-      <div class="card-title">Distribución</div>
+      <div class="card-title">Distribución <span style="font-size:8px;color:var(--text3);letter-spacing:0;text-transform:none;font-family:var(--sans)">— clic para filtrar</span></div>
       <div class="chart-wrap"><canvas id="ch-donut"></canvas></div>
     </div>
   </div>
@@ -290,7 +290,8 @@ function getFilters(){
 
 function applyFilters(){
   const F = getFilters();
-  filtered = ROWS.filter(r => {
+  // Base filter (without donutHidden) — used for charts
+  const baseFilter = r => {
     const parts = r[0].split('/');
     if(parts.length!==3) return false;
     const [d, mo, y] = parts;
@@ -304,7 +305,13 @@ function applyFilters(){
     if(F.tipo==='gasto'   && r[7]>=0)     return false;
     if(F.search  && !r[1].toLowerCase().includes(F.search)) return false;
     return true;
-  });
+  };
+  window.filteredFull = ROWS.filter(baseFilter);
+
+  // With donutHidden — used for table
+  filtered = window.filteredFull.filter(r =>
+    !(window.donutHidden && window.donutHidden.size>0 && window.donutHidden.has(r[2]))
+  );
 
   // Sort
   filtered.sort((a,b)=>{
@@ -364,6 +371,8 @@ function clearFilters(){
     if(allCb) allCb.checked=true;
     updateLabel(id);
   });
+  window.donutHidden = new Set();
+  if(charts.donut){ const meta=charts.donut.getDatasetMeta(0); meta.data.forEach(d=>d.hidden=false); charts.donut.update(); }
   document.getElementById('f-search').value='';
   applyFilters();
 }
@@ -399,8 +408,9 @@ function render(){
 
 function renderCharts(ingresos, gastos){
   // Monthly bar chart
+  const src = window.filteredFull || filtered;
   const monthMap = {};
-  filtered.forEach(r=>{
+  src.forEach(r=>{
     const p=r[0].split('/');if(p.length!==3)return;
     const key=`${p[2]}-${p[1].padStart(2,'0')}`;
     if(!monthMap[key])monthMap[key]={ing:0,gas:0};
@@ -421,9 +431,9 @@ function renderCharts(ingresos, gastos){
       scales:{x:{grid:GR,ticks:{...TK,maxRotation:45},border:{display:false}},y:{grid:GR,ticks:{...TK,callback:fmtN},border:{display:false}}}}
   });
 
-  // Category bars
+  // Category bars and donut use filteredFull (pre-donutHidden) so all cats stay visible
   const catMap={};
-  filtered.forEach(r=>{
+  src.forEach(r=>{
     if(!catMap[r[2]])catMap[r[2]]={ing:0,gas:0};
     if(r[7]>0)catMap[r[2]].ing+=r[7]; else catMap[r[2]].gas+=Math.abs(r[7]);
   });
@@ -431,20 +441,72 @@ function renderCharts(ingresos, gastos){
   const maxCat=catEntries[0]?.v||1;
   document.getElementById('cat-bars').innerHTML=catEntries.map((c,i)=>`
     <div class="bar-row">
-      <span class="bar-lbl" title="${c.k}" style="color:${CAT_COLORS[i%CAT_COLORS.length]}">${c.k}</span>
-      <div class="bar-track"><div class="bar-fill" style="width:${c.v/maxCat*100}%;background:${CAT_COLORS[i%CAT_COLORS.length]}"></div></div>
-      <span class="bar-val" style="color:var(--text2)">${fmtN(c.v)}</span>
+      <span class="bar-lbl" title="${c.k}" style="color:${window.donutHidden?.has(c.k)?C_MUTED:CAT_COLORS[i%CAT_COLORS.length]}">${c.k}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${c.v/maxCat*100}%;background:${window.donutHidden?.has(c.k)?C_DIM:CAT_COLORS[i%CAT_COLORS.length]}"></div></div>
+      <span class="bar-val" style="color:${window.donutHidden?.has(c.k)?C_MUTED:C_TEXT2}">${fmtN(c.v)}</span>
     </div>`).join('');
 
-  // Donut - gastos only
+  // Donut - gastos only (all categories, hidden ones shown faded)
   const gasEntries=Object.entries(catMap).filter(([,v])=>v.gas>0).sort((a,b)=>b[1].gas-a[1].gas).slice(0,10);
   if(charts.donut){charts.donut.destroy();}
+  if(!window.donutHidden) window.donutHidden = new Set();
+  const donutLabels = gasEntries.map(([k])=>k);
+  const donutColors = gasEntries.map(([k],i) =>
+    window.donutHidden.has(k) ? 'rgba(255,255,255,0.05)' : CAT_COLORS[i % CAT_COLORS.length]
+  );
+
   charts.donut = new Chart(document.getElementById('ch-donut'),{
     type:'doughnut',
-    data:{labels:gasEntries.map(([k])=>k),datasets:[{data:gasEntries.map(([,v])=>v.gas),backgroundColor:CAT_COLORS.slice(0,gasEntries.length),borderWidth:0,hoverOffset:4}]},
-    options:{responsive:true,maintainAspectRatio:false,animation:false,cutout:'60%',
-      plugins:{legend:{position:'right',labels:{color:'#7A8CAA',font:{size:9,family:"'DM Mono',monospace"},boxWidth:8,padding:5}},
-      tooltip:{...TIP,callbacks:{label:c=>c.label+': '+fmtN(c.raw)}}}}
+    data:{
+      labels: donutLabels,
+      datasets:[{
+        data: gasEntries.map(([,v])=>v.gas),
+        backgroundColor: donutColors,
+        borderWidth: 0,
+        hoverOffset: 4
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:false, cutout:'60%',
+      plugins:{
+        legend:{
+          position:'right',
+          labels:{
+            color:'#7A8CAA',
+            font:{size:9,family:"'DM Mono',monospace"},
+            boxWidth:8, padding:5,
+            generateLabels(chart){
+              return chart.data.labels.map((lbl,i)=>({
+                text: lbl,
+                index: i,
+                fillStyle: window.donutHidden.has(lbl) ? '#2A3040' : CAT_COLORS[i % CAT_COLORS.length],
+                fontColor: window.donutHidden.has(lbl) ? '#3D4F6B' : '#7A8CAA',
+                lineWidth: 0,
+                hidden: false, // never hide from legend
+              }));
+            }
+          },
+          onClick(e, legendItem, legend){
+            const lbl = donutLabels[legendItem.index];
+            if(window.donutHidden.has(lbl)) window.donutHidden.delete(lbl);
+            else window.donutHidden.add(lbl);
+            // Rebuild donut with new colors
+            const newColors = donutLabels.map((l,i) =>
+              window.donutHidden.has(l) ? 'rgba(255,255,255,0.05)' : CAT_COLORS[i % CAT_COLORS.length]
+            );
+            legend.chart.data.datasets[0].backgroundColor = newColors;
+            legend.chart.update();
+            applyFilters();
+          }
+        },
+        tooltip:{
+          ...TIP,
+          callbacks:{
+            label: c => window.donutHidden.has(c.label) ? null : c.label+': '+fmtN(c.raw)
+          }
+        }
+      }
+    }
   });
 }
 
