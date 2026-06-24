@@ -28,6 +28,16 @@ header{height:52px;display:flex;align-items:center;justify-content:space-between
 .filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 1.5rem;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:52px;z-index:40;}
 .fsel{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;font-family:var(--sans);font-size:12px;outline:none;cursor:pointer;transition:border .15s;}
 .fsel:focus{border-color:var(--purple);}
+.multi-sel-wrap{position:relative;}
+.multi-btn{display:flex;align-items:center;gap:6px;white-space:nowrap;min-width:160px;justify-content:space-between;}
+.multi-btn.active{border-color:var(--purple);color:var(--purple);}
+.multi-menu{position:absolute;top:calc(100% + 4px);left:0;z-index:200;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:8px 0;min-width:200px;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px #000a;}
+.multi-opt{display:flex;align-items:center;gap:8px;padding:6px 14px;cursor:pointer;font-size:12px;color:var(--text2);transition:background .1s;}
+.multi-opt:hover{background:var(--bg3);color:var(--text);}
+.multi-opt input[type=checkbox]{accent-color:var(--purple);width:13px;height:13px;cursor:pointer;}
+.all-opt{color:var(--text);font-weight:600;}
+.multi-divider{height:1px;background:var(--border);margin:4px 0;}
+.fsel:focus{border-color:var(--purple);}
 .fsel.active{border-color:var(--purple);color:var(--purple);}
 .srch{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;font-family:var(--sans);font-size:12px;outline:none;width:200px;}
 .srch:focus{border-color:var(--purple);}
@@ -99,10 +109,48 @@ tr:hover td{background:#ffffff03;}
 <div class="filter-bar">
   <select class="fsel" id="f-year"    onchange="onFilterChange()"><option value="">Todos los años</option></select>
   <select class="fsel" id="f-month"   onchange="onFilterChange()"><option value="">Todos los meses</option></select>
-  <select class="fsel" id="f-cat"     onchange="onFilterChange()"><option value="">Todas las categorías</option></select>
-  <select class="fsel" id="f-persona" onchange="onFilterChange()"><option value="">Todas las personas</option></select>
-  <select class="fsel" id="f-cuenta"  onchange="onFilterChange()"><option value="">Todas las cuentas</option></select>
-  <select class="fsel" id="f-metodo"  onchange="onFilterChange()"><option value="">Todos los métodos</option></select>
+  <div class="multi-sel-wrap" id="cat-wrap">
+    <button class="fsel multi-btn" id="cat-btn" onclick="toggleCatMenu(event)">
+      <span id="cat-label">Todas las categorías</span> ▾
+    </button>
+    <div class="multi-menu" id="cat-menu" style="display:none">
+      <label class="multi-opt all-opt">
+        <input type="checkbox" id="cat-all" checked onchange="toggleAllCats(this)"> Todas las categorías
+      </label>
+      <div class="multi-divider"></div>
+      <div id="cat-options"></div>
+    </div>
+  </div>
+  <div class="multi-sel-wrap" id="persona-wrap">
+    <button class="fsel multi-btn" id="persona-btn" onclick="toggleMenu('persona',event)">
+      <span id="persona-label">Todas las personas</span> ▾
+    </button>
+    <div class="multi-menu" id="persona-menu" style="display:none">
+      <label class="multi-opt all-opt"><input type="checkbox" id="persona-all" checked onchange="toggleAll('persona',this)"> Todas las personas</label>
+      <div class="multi-divider"></div>
+      <div id="persona-options"></div>
+    </div>
+  </div>
+  <div class="multi-sel-wrap" id="cuenta-wrap">
+    <button class="fsel multi-btn" id="cuenta-btn" onclick="toggleMenu('cuenta',event)">
+      <span id="cuenta-label">Todas las cuentas</span> ▾
+    </button>
+    <div class="multi-menu" id="cuenta-menu" style="display:none">
+      <label class="multi-opt all-opt"><input type="checkbox" id="cuenta-all" checked onchange="toggleAll('cuenta',this)"> Todas las cuentas</label>
+      <div class="multi-divider"></div>
+      <div id="cuenta-options"></div>
+    </div>
+  </div>
+  <div class="multi-sel-wrap" id="metodo-wrap">
+    <button class="fsel multi-btn" id="metodo-btn" onclick="toggleMenu('metodo',event)">
+      <span id="metodo-label">Todos los métodos</span> ▾
+    </button>
+    <div class="multi-menu" id="metodo-menu" style="display:none">
+      <label class="multi-opt all-opt"><input type="checkbox" id="metodo-all" checked onchange="toggleAll('metodo',this)"> Todos los métodos</label>
+      <div class="multi-divider"></div>
+      <div id="metodo-options"></div>
+    </div>
+  </div>
   <select class="fsel" id="f-tipo"    onchange="onFilterChange()">
     <option value="">Ingresos y gastos</option>
     <option value="ingreso">Solo ingresos</option>
@@ -191,10 +239,29 @@ function initFilters(){
 
   // Other filters
   const add=(id,arr)=>{const sel=document.getElementById(id);arr.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});};
-  add('f-cat',    META.cats);
-  add('f-persona',META.personas);
-  add('f-cuenta', META.cuentas);
-  add('f-metodo', META.metodos);
+  // Populate category checkboxes
+  const catOpts = document.getElementById('cat-options');
+  META.cats.forEach(c=>{
+    const lbl = document.createElement('label');
+    lbl.className = 'multi-opt';
+    lbl.innerHTML = `<input type="checkbox" class="cat-cb" value="${c}" checked onchange="onCatChange()"> ${c}`;
+    catOpts.appendChild(lbl);
+  });
+  // Populate multi-select checkboxes
+  const MULTI_FIELDS = [
+    {id:'persona', items:META.personas, label:'persona'},
+    {id:'cuenta',  items:META.cuentas,  label:'cuenta'},
+    {id:'metodo',  items:META.metodos,  label:'método'},
+  ];
+  MULTI_FIELDS.forEach(({id, items})=>{
+    const container = document.getElementById(id+'-options');
+    items.forEach(v=>{
+      const lbl = document.createElement('label');
+      lbl.className = 'multi-opt';
+      lbl.innerHTML = `<input type="checkbox" class="${id}-cb" value="${v}" checked onchange="onMultiChange('${id}')"> ${v}`;
+      container.appendChild(lbl);
+    });
+  });
 
   // Default: current month
   const now = new Date();
@@ -207,10 +274,15 @@ function getFilters(){
   return {
     year:    document.getElementById('f-year').value,
     month:   document.getElementById('f-month').value,
-    cat:     document.getElementById('f-cat').value,
-    persona: document.getElementById('f-persona').value,
-    cuenta:  document.getElementById('f-cuenta').value,
-    metodo:  document.getElementById('f-metodo').value,
+    cats:       [...document.querySelectorAll('.cat-cb:checked')].map(cb=>cb.value),
+    allCats:    document.getElementById('cat-all').checked,
+    personas:   [...document.querySelectorAll('.persona-cb:checked')].map(cb=>cb.value),
+    allPersonas:document.getElementById('persona-all').checked,
+    cuentas:    [...document.querySelectorAll('.cuenta-cb:checked')].map(cb=>cb.value),
+    allCuentas: document.getElementById('cuenta-all').checked,
+    metodos:    [...document.querySelectorAll('.metodo-cb:checked')].map(cb=>cb.value),
+    allMetodos: document.getElementById('metodo-all').checked,
+
     tipo:    document.getElementById('f-tipo').value,
     search:  document.getElementById('f-search').value.toLowerCase().trim(),
   };
@@ -224,10 +296,10 @@ function applyFilters(){
     const [d, mo, y] = parts;
     if(F.year    && y !== F.year)         return false;
     if(F.month   && mo.padStart(2,'0') !== F.month) return false;
-    if(F.cat     && r[2] !== F.cat)       return false;
-    if(F.persona && r[4] !== F.persona)   return false;
-    if(F.cuenta  && r[5] !== F.cuenta)    return false;
-    if(F.metodo  && r[6] !== F.metodo)    return false;
+    if(!F.allCats     && !F.cats.includes(r[2]))     return false;
+    if(!F.allPersonas && !F.personas.includes(r[4])) return false;
+    if(!F.allCuentas  && !F.cuentas.includes(r[5]))  return false;
+    if(!F.allMetodos  && !F.metodos.includes(r[6]))  return false;
     if(F.tipo==='ingreso' && r[7]<0)      return false;
     if(F.tipo==='gasto'   && r[7]>=0)     return false;
     if(F.search  && !r[1].toLowerCase().includes(F.search)) return false;
@@ -245,7 +317,22 @@ function applyFilters(){
   const parts=[];
   if(F.year)    parts.push(F.year);
   if(F.month)   parts.push(MES[parseInt(F.month)-1]);
-  if(F.cat)     parts.push(F.cat);
+  if(!F.allCats){
+    if(F.cats.length===1) parts.push(F.cats[0]);
+    else if(F.cats.length>1) parts.push(`${F.cats.length} categorías`);
+  }
+  if(!F.allPersonas){
+    if(F.personas.length===1) parts.push(F.personas[0]);
+    else if(F.personas.length>1) parts.push(`${F.personas.length} personas`);
+  }
+  if(!F.allCuentas){
+    if(F.cuentas.length===1) parts.push(F.cuentas[0]);
+    else if(F.cuentas.length>1) parts.push(`${F.cuentas.length} cuentas`);
+  }
+  if(!F.allMetodos){
+    if(F.metodos.length===1) parts.push(F.metodos[0]);
+    else if(F.metodos.length>1) parts.push(`${F.metodos.length} métodos`);
+  }
   if(F.persona) parts.push(F.persona);
   if(F.cuenta)  parts.push(F.cuenta);
   if(F.metodo)  parts.push(F.metodo);
@@ -253,9 +340,16 @@ function applyFilters(){
   document.getElementById('filter-summary').textContent = parts.length ? parts.join(' · ') : 'Todos los registros';
 
   // Mark active filters
-  ['f-year','f-month','f-cat','f-persona','f-cuenta','f-metodo'].forEach(id=>{
+  const catBtn = document.getElementById('cat-btn');
+  const allChecked = document.getElementById('cat-all').checked;
+  catBtn.classList.toggle('active', !allChecked);
+  ['persona','cuenta','metodo'].forEach(id=>{
+    const btn=document.getElementById(id+'-btn');
+    if(btn) btn.classList.toggle('active', !document.getElementById(id+'-all').checked);
+  });
+  ['f-year','f-month'].forEach(id=>{
     const el=document.getElementById(id);
-    el.classList.toggle('active', !!el.value);
+    if(el) el.classList.toggle('active', !!el.value);
   });
 
   render();
@@ -263,7 +357,13 @@ function applyFilters(){
 
 function onFilterChange(){ applyFilters(); }
 function clearFilters(){
-  ['f-year','f-month','f-cat','f-persona','f-cuenta','f-metodo','f-tipo'].forEach(id=>document.getElementById(id).value='');
+  ['f-year','f-month','f-tipo'].forEach(id=>document.getElementById(id).value='');
+  ['cat','persona','cuenta','metodo'].forEach(id=>{
+    document.querySelectorAll('.'+id+'-cb').forEach(cb=>cb.checked=true);
+    const allCb=document.getElementById(id+'-all');
+    if(allCb) allCb.checked=true;
+    updateLabel(id);
+  });
   document.getElementById('f-search').value='';
   applyFilters();
 }
@@ -396,6 +496,49 @@ function sortBy(col){
   applyFilters();
 }
 
+// ── MULTI SELECT GENERIC ─────────────────────────────────────────────────────
+const MULTI_IDS = ['cat','persona','cuenta','metodo'];
+const MULTI_LABELS = {cat:'categorías',persona:'personas',cuenta:'cuentas',metodo:'métodos'};
+const MULTI_ALL_LABELS = {cat:'Todas las categorías',persona:'Todas las personas',cuenta:'Todas las cuentas',metodo:'Todos los métodos'};
+
+function toggleMenu(id, e){
+  e.stopPropagation();
+  MULTI_IDS.forEach(i=>{ if(i!==id){ const m=document.getElementById(i+'-menu'); if(m)m.style.display='none'; }});
+  const menu=document.getElementById(id+'-menu');
+  menu.style.display = menu.style.display==='none'?'block':'none';
+}
+document.addEventListener('click', e=>{
+  MULTI_IDS.forEach(id=>{
+    if(!document.getElementById(id+'-wrap')?.contains(e.target)){
+      const m=document.getElementById(id+'-menu'); if(m)m.style.display='none';
+    }
+  });
+});
+function toggleAll(id, cb){
+  document.querySelectorAll('.'+id+'-cb').forEach(el=>el.checked=cb.checked);
+  updateLabel(id); onFilterChange();
+}
+function onMultiChange(id){
+  const cbs=[...document.querySelectorAll('.'+id+'-cb')];
+  document.getElementById(id+'-all').checked = cbs.every(cb=>cb.checked);
+  updateLabel(id); onFilterChange();
+}
+function updateLabel(id){
+  const checked=[...document.querySelectorAll('.'+id+'-cb:checked')];
+  const total=document.querySelectorAll('.'+id+'-cb').length;
+  const lbl=document.getElementById(id+'-label');
+  if(!lbl)return;
+  if(checked.length===0)         lbl.textContent='Sin selección';
+  else if(checked.length===total) lbl.textContent=MULTI_ALL_LABELS[id];
+  else if(checked.length===1)    lbl.textContent=checked[0].value;
+  else                           lbl.textContent=`${checked.length} ${MULTI_LABELS[id]}`;
+}
+// Legacy aliases
+function toggleCatMenu(e){toggleMenu('cat',e);}
+function toggleAllCats(cb){toggleAll('cat',cb);}
+function onCatChange(){onMultiChange('cat');}
+function updateCatLabel(){updateLabel('cat');}
+
 // ── EXPORT ────────────────────────────────────────────────────────────────────
 function exportCSV(){
   const headers=['Fecha','Título','Categoría','Subcategoría','Persona','Cuenta','Método','Importe'];
@@ -412,6 +555,12 @@ initFilters();
 applyFilters();
 
 window.onFilterChange=onFilterChange;
+window.toggleMenu=toggleMenu;
+window.toggleAll=toggleAll;
+window.onMultiChange=onMultiChange;
+window.toggleCatMenu=toggleCatMenu;
+window.toggleAllCats=toggleAllCats;
+window.onCatChange=onCatChange;
 window.clearFilters=clearFilters;
 window.sortBy=sortBy;
 window.loadMore=loadMore;
